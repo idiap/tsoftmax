@@ -2,7 +2,7 @@
 
 This repository contains the code to reproduce the results of the paper: 
 
-  [Niccolò Antonello, Philip N. Garner "A _t_-distribution based operator for enhancing out of distribution robustness of neural network classifiers," IEEE Signal Processing Letters, 2020, to appear.](https://arxiv.org/abs/2006.05389)
+  [Niccolò Antonello, Philip N. Garner "A _t_-distribution based operator for enhancing out of distribution robustness of neural network classifiers," IEEE Signal Processing Letters, 2020](https://arxiv.org/abs/2006.05389)
 
 The code is based on the [Pytorch machine learning library](https://github.com/pytorch/pytorch).
 If you want to use _t_-softmax in your classifiers/neural networks you can find the modules in `src/tsoftmax.py`.
