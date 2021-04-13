@@ -54,11 +54,11 @@ bash run_eval_bw.sh
 
 Finally you can view the results by running the following script:
 ```bash
-python plot_fom.py --arch convnet --data fmnist 
+python src/plot_fom.py --arch convnet --data fmnist 
 ```
 and 
 ```bash
-python plot_fom.py --arch convnet --data kmnist 
+python src/plot_fom.py --arch convnet --data kmnist 
 ```
 
 ## Experiments on CIFAR10

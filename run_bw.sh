@@ -2,20 +2,7 @@
 # Copyright (c) 2020 Idiap Research Institute, http://www.idiap.ch/
 # Written by Niccolo Antonello <nantonel@idiap.ch>,
 # Philip N. Garner <pgarner@idiap.ch>
-# 
-# This file is part of tsoftmax.
-# 
-# tsoftmax is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 3 as
-# published by the Free Software Foundation.
-# 
-# tsoftmax is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with tsoftmax. If not, see <http://www.gnu.org/licenses/>.
+set -e
 
 . ./path.sh
 echo "Using conda enviroment: $PYPATH"
@@ -23,9 +10,10 @@ echo "Using conda enviroment: $PYPATH"
 data=$1 #kmnist or fmnist
 arch="convnet"
 epochs=20
+declare -a nus=(0.5 1.0 5.0 10.0)
 
-$PYPATH/python src/train.py --nu 0.0 --epochs $epochs --data $data --arch $arch || exit 1 
-$PYPATH/python src/train.py --nu 0.5 --epochs $epochs --data $data --arch $arch || exit 1
-$PYPATH/python src/train.py --nu 1.0 --epochs $epochs --data $data --arch $arch || exit 1
-$PYPATH/python src/train.py --nu 5.0 --epochs $epochs --data $data --arch $arch || exit 1
-$PYPATH/python src/train.py --nu 10.0 --epochs $epochs --data $data --arch $arch || exit 1
+$PYPATH/python src/train.py --epochs $epochs --data $data --arch $arch
+for nu in "${nus[@]}"; do
+  $PYPATH/python src/train.py --epochs $epochs --data $data --arch $arch --use-tsoftmax $nu
+  $PYPATH/python src/train.py --epochs 5 --data $data --arch $arch --use-tnet $nu
+done

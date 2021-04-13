@@ -4,7 +4,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tsoftmax import Quadratic, TSoftmax, TLogSoftmax  
+from tsoftmax import Quadratic, TSoftmax, LogTSoftmax  
 
 class BasicBlock(nn.Module):
     def __init__(self, in_planes, out_planes, dropRate=0.0):
@@ -99,16 +99,16 @@ class DenseNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(in_planes)
         self.relu1 = nn.ReLU(inplace=True)
         self.relu2 = nn.ReLU(inplace=True)
-        self.fc1 = nn.Linear(in_planes, in_planes-n*growth_rate)
+        self.penultimate_dim = in_planes-n*growth_rate
+        self.fc1 = nn.Linear(in_planes, self.penultimate_dim)
         self.in_planes = in_planes
         self.nu = nu
-
         if self.nu == 0:
-            self.fc2 = nn.Linear(in_planes-n*growth_rate, num_classes)
+            self.fc2 = nn.Linear(self.penultimate_dim, num_classes)
             self.out = nn.LogSoftmax(dim=1) 
         else:
-            self.fc2 = Quadratic(in_planes-n*growth_rate, num_classes)
-            self.out = TLogSoftmax(nu=nu)
+            self.fc2 = Quadratic(self.penultimate_dim, num_classes)
+            self.out = LogTSoftmax(nu=nu)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -120,7 +120,7 @@ class DenseNet(nn.Module):
             elif isinstance(m, nn.Linear):
                 m.bias.data.zero_()
 
-    def last_layer(self, x):
+    def penultimate_layer(self, x):
         x = self.conv1(x)
         x = self.trans1(self.block1(x))
         x = self.trans2(self.block2(x))
@@ -128,9 +128,14 @@ class DenseNet(nn.Module):
         x = self.relu1(self.bn1(x))
         x = F.avg_pool2d(x, 8)
         x = x.view(-1, self.in_planes)
-        x = self.relu2(self.fc1(x))
-        y = self.fc2(x)
-        return y
+        x = self.fc1(x)
+        return x
+
+    def last_layer(self, x):
+        x = self.penultimate_layer(x)
+        x = self.relu2(x)
+        x = self.fc2(x)
+        return x
 
     def forward(self, x):
         y = self.last_layer(x)
@@ -138,8 +143,5 @@ class DenseNet(nn.Module):
 
 if __name__ == '__main__':
     net=DenseNet(50, 10)
-    y = net(torch.randn(1,3,32,32))
-    print(y.size())
-    net=DenseNet(50, 10, nu=1.0)
-    y = net(torch.randn(1,3,32,32))
+    y = net(torch.randn(5,3,32,32))
     print(y.size())

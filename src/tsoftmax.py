@@ -1,20 +1,6 @@
 # Copyright (c) 2020 Idiap Research Institute, http://www.idiap.ch/
 # Written by Niccolo Antonello <nantonel@idiap.ch>,
 # Philip N. Garner <pgarner@idiap.ch>
-# 
-# This file is part of tsoftmax.
-# 
-# tsoftmax is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 3 as
-# published by the Free Software Foundation.
-# 
-# tsoftmax is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with tsoftmax. If not, see <http://www.gnu.org/licenses/>.
 
 import torch
 import torch.nn as nn
@@ -51,10 +37,10 @@ class TSoftmax(nn.Module):
         x = F.normalize(x, p=1.0, dim=1)
         return x
 
-class TLogSoftmax(nn.Module):
+class LogTSoftmax(nn.Module):
     
     def __init__(self, nu=1.0):
-        super(TLogSoftmax, self).__init__()
+        super(LogTSoftmax, self).__init__()
         self.register_buffer('nu', torch.tensor(nu))
         self.register_buffer('beta', -(self.nu+1)/2)
         

@@ -1,20 +1,6 @@
 # Copyright (c) 2020 Idiap Research Institute, http://www.idiap.ch/
 # Written by Niccolo Antonello <nantonel@idiap.ch>,
 # Philip N. Garner <pgarner@idiap.ch>
-# 
-# This file is part of tsoftmax.
-# 
-# tsoftmax is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 3 as
-# published by the Free Software Foundation.
-# 
-# tsoftmax is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with tsoftmax. If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import print_function
 import os
@@ -24,23 +10,23 @@ import torch
 import pandas as pd
 from torchvision import datasets
 import torchvision.transforms as trn
-from tsoftmax import TSoftmax, TLogSoftmax
 from convnet import ConvNet
 from densenet import DenseNet
 from utils import get_normal
 import torch.nn.functional as F
 import time
+from tnet import TNet
 
-def confidence(args, data, model, mode):
-    if ( mode == 'msp' ) | ( mode == 'tmsp' ) | ( mode == 'tmsp0.5' ) | ( mode == 'tmsp5.0' ) | ( mode == 'tmsp10.0' ):
+def confidence(args, data, model, tnet, mode):
+    if mode == 'msp' or mode[:4] == 'tmsp':
         with torch.no_grad():
             output = model(data)
             C, pred = output.max(dim=1, keepdim=True) # get the index of the max log-probability
-    elif mode == 'cb':
+    elif mode[:4] == 'tnet':
         with torch.no_grad():
-            output, C = model(data)
-            _, pred = output.max(dim=1, keepdim=True) # get the index of the max log-probability
-            C.log_()
+            y = model.penultimate_layer(data)
+            output = tnet(y)
+            C, pred = output.max(dim=1, keepdim=True) # get the index of the max log-probability
     elif mode == 'odin':
         data.requires_grad = True
         model.zero_grad()
@@ -60,7 +46,7 @@ def confidence(args, data, model, mode):
             C, pred = output.max(dim=1, keepdim=True) # get the index of the max log-probability
     return C, pred
     
-def test(args, model, device, test_loader):
+def test(args, model, tnet, device, test_loader):
 
     N = len(test_loader.dataset)
     score = torch.zeros(N) 
@@ -73,7 +59,7 @@ def test(args, model, device, test_loader):
     for i,(data, target) in enumerate(test_loader):
         data, target = data.to(device), target.to(device)
         t0 = time.time()
-        C, pred = confidence(args, data, model, args.mode)
+        C, pred = confidence(args, data, model, tnet, args.mode)
         delta_t[i] = time.time()-t0
         correct += pred.eq(target.view_as(pred)).sum().item()
 
@@ -210,23 +196,13 @@ def main():
         Nc = 10
         channels=1
 
-    if (args.mode == 'msp') | (args.mode == 'odin') | (args.mode == 'cb'):
-        nu = 0.0
-    elif args.mode == 'tmsp':
-        nu = 1.0
-    elif args.mode == 'tmsp0.5':
-        nu = 0.5
-    elif args.mode == 'tmsp5.0':
-        nu = 5.0
-    elif args.mode == 'tmsp10.0':
-        nu = 10.0
-    else:
-        print('mode not recognized!')
-        quit()
-
     model_path= 'models'
     model_path += '/' + args.data
-    model_name = args.arch+'nu{}'.format(nu)
+
+    if args.mode[:4] == 'tmsp':
+        nu = float(args.mode[4:])
+    else:
+        nu = 0.0
 
     if args.arch == 'densenet':
         densenet_depth=100
@@ -237,10 +213,28 @@ def main():
     elif args.arch == 'convnet':
         model = ConvNet(Nc, channels=channels, nu=nu).to(device)
 
+    if model.nu != 0:
+        suffix = "_nu{}".format(model.nu)
+    else:
+        suffix = ""
+
+    suffix += "_best"
+    model_name = args.arch+suffix
+
     model.load_state_dict(torch.load(model_path+'/'+model_name+'.pt', 
         map_location=device))
 
-    score, is_hit = test(args, model, device, test_loader)
+    if args.mode[:4] == 'tnet':
+        nu = float(args.mode[4:])
+        tnet = TNet(model.penultimate_dim,Nc,
+                Nh = (3*model.penultimate_dim)//4,
+                nu=nu).to(device)
+        tnet.load_state_dict(torch.load(model_path+'/'+'tnet_{}'.format(nu)+model_name+'.pt', 
+        map_location=device))
+    else:
+        tnet = None
+
+    score, is_hit = test(args, model, tnet, device, test_loader)
     if not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
     df = pd.DataFrame(data={'score' : score, 'is_hit' : is_hit})

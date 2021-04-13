@@ -1,20 +1,6 @@
 # Copyright (c) 2020 Idiap Research Institute, http://www.idiap.ch/
 # Written by Niccolo Antonello <nantonel@idiap.ch>,
 # Philip N. Garner <pgarner@idiap.ch>
-# 
-# This file is part of tsoftmax.
-# 
-# tsoftmax is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 3 as
-# published by the Free Software Foundation.
-# 
-# tsoftmax is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with tsoftmax. If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
 import os
@@ -49,15 +35,17 @@ def main():
         quit()
 
     if args.data == 'cifar10':
-        modes=['msp','odin','tmsp0.5','tmsp','tmsp5.0','tmsp10.0']
+        modes=['msp', 'odin']
+        for nu in [1.0, 5.0, 10.0]:
+            modes += ["tnet{}".format(nu)]
         foms=['fprtpr95','de','rocauc','prauc']
         oods=['svhn', 'lsun', 'fakedata']
     elif args.data == 'fmnist':
-        modes=['msp','odin','tmsp0.5', 'tmsp', 'tmsp5.0', 'tmsp10.0']
+        modes=['msp','odin','tmsp0.5', 'tnet0.5', 'tmsp1.0', 'tnet1.0', 'tmsp5.0', 'tnet5.0', 'tmsp10.0', 'tnet10.0']
         foms=['fprtpr95','de','rocauc','prauc']
         oods=['mnist', 'kmnist', 'cifar10_bw', 'fakedata_bw']
     elif args.data == 'kmnist':
-        modes=['msp','odin','tmsp0.5', 'tmsp', 'tmsp5.0', 'tmsp10.0']
+        modes=['msp','odin','tmsp0.5', 'tnet0.5', 'tmsp1.0', 'tnet1.0', 'tmsp5.0', 'tnet5.0', 'tmsp10.0', 'tnet10.0']
         foms=['fprtpr95','de','rocauc','prauc']
         oods=['mnist', 'fmnist', 'cifar10_bw', 'fakedata_bw']
 
@@ -79,8 +67,9 @@ def main():
                 print(y)
                 if not os.path.exists(args.csv_dest):
                     os.makedirs(args.csv_dest)
-                y[oods].reset_index().to_csv(args.csv_dest+
-                        '{}_{}_{}_{}.csv'.format(args.arch,args.data,modes[k],foms[z]), 
+                csv_file = '{}_{}_{}_{}.csv'.format(args.arch,args.data,modes[k],foms[z]) 
+                y[oods].reset_index().to_csv(
+                        os.path.join(args.csv_dest, csv_file),
                         header=['ood','fom'])
             y = y.to_numpy()
             ymin = min(y.min(),ymin)

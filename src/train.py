@@ -1,20 +1,6 @@
 # Copyright (c) 2020 Idiap Research Institute, http://www.idiap.ch/
 # Written by Niccolo Antonello <nantonel@idiap.ch>,
 # Philip N. Garner <pgarner@idiap.ch>
-# 
-# This file is part of tsoftmax.
-# 
-# tsoftmax is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 3 as
-# published by the Free Software Foundation.
-# 
-# tsoftmax is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with tsoftmax. If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import print_function
 import argparse
@@ -28,49 +14,77 @@ from torchvision import datasets
 import torchvision.transforms as trn
 from convnet import ConvNet
 from densenet import DenseNet
+from tnet import TNet
 from utils import get_normal
 
-def save_model(model, arch, data, nu, save_path='models'):
+def save_model(model, tnet, arch, data, save_path='models', best=False):
     # Make save directory
     save_path += '/' + data
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-    md = model.state_dict()
 
-    model_name = arch+'nu{}'.format(nu)
-    torch.save(md,"{}/{}.pt".format(save_path, model_name))
+    if model.nu != 0:
+        suffix = "_nu{}".format(model.nu)
+    else:
+        suffix = ""
 
-def train(args, model, device, train_loader, optimizer, epoch):
-    model.train()
+    if best:
+        suffix += "_best"
+
+    if tnet == None:
+        md = model.state_dict()
+        torch.save(md,"{}/{}{}.pt".format(save_path, arch, suffix))
+    else:
+        md = tnet.state_dict()
+        torch.save(md,"{}/tnet_{}{}{}.pt".format(save_path, tnet.nu, arch, suffix))
+
+def train(args, model, tnet, device, train_loader, optimizer, epoch):
+    if tnet == None:
+        model.train()
+    else:
+        model.eval()
+        tnet.train()
 
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-
-        output = model(data)
+        if tnet == None:
+            output = model(data)
+        else:
+            with torch.no_grad():
+                y = model.penultimate_layer(data)
+            output = tnet(y)
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
 
-def test(args, model, device, test_loader):
+def test(args, model, tnet, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
+            if tnet == None:
+                output = model(data)
+            else:
+                y = model.penultimate_layer(data)
+                output = tnet(y)
 
             test_loss += F.nll_loss(output, target, reduction='sum').item() # sum up batch loss
             pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
+    accuracy = correct / len(test_loader.dataset)
 
     if args.verbose > 0:
-        print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+        print('Test set: Average loss: {:.4f}, Test Accuracy: {}/{} ({:.0f}%)'.format(
             test_loss, correct, len(test_loader.dataset),
-            100. * correct / len(test_loader.dataset)))
+            100. * accuracy)
+            )
+    
+    return accuracy
 
 def main():
     # Training settings
@@ -99,8 +113,10 @@ def main():
                         help='dataset')
     parser.add_argument('--arch', type=str, default='densenet', metavar='ARC',
                         help='neural network architecture')
-    parser.add_argument('--nu', type=float, default=0.0, metavar='NU',
-                        help='nu value of t-softmax (default: 0.0 -> standard softmax is used)')
+    parser.add_argument('--use-tsoftmax', type=float, default=0.0,
+                        help='train model with tsoftmax layer from scratch, if 0 train model without it')
+    parser.add_argument('--use-tnet', type=float, default=0.0,
+                        help='train tsoftmax layer using a pre-trained model, if 0 train model without it')
 
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -174,16 +190,35 @@ def main():
         
     if args.arch == 'densenet':
         densenet_depth=100
-        model = DenseNet(densenet_depth, Nc, nu=args.nu).to(device)
+        model = DenseNet(densenet_depth, Nc, nu=args.use_tsoftmax).to(device)
     elif args.arch == 'densenet_small':
         densenet_depth=10
-        model = DenseNet(densenet_depth, Nc, nu=args.nu).to(device)
+        model = DenseNet(densenet_depth, Nc, nu=args.use_tsoftmax).to(device)
     elif args.arch == 'convnet':
-        model = ConvNet(Nc, channels=channels, nu=args.nu).to(device)
-    if args.verbose > 0:
-        print(model)
+        model = ConvNet(Nc, channels=channels, nu=args.use_tsoftmax).to(device)
 
-    optimizer = optim.SGD(model.parameters(), 
+    if args.use_tnet > 0:
+        if args.use_tsoftmax != 0:
+            suffix = "_nu{}".format(args.use_tsoftmax)
+        else:
+            suffix = ""
+        suffix += "_best"
+        # load model
+        model.load_state_dict(torch.load('models/{}/{}{}.pt'.format(args.data,args.arch,suffix), 
+            map_location=device))
+        tnet = TNet(model.penultimate_dim,Nc,
+                Nh = (3*model.penultimate_dim)//4,
+                nu=args.use_tnet).to(device)
+        if args.verbose > 0:
+            print(tnet)
+        ps = tnet.parameters()
+    else:
+        tnet = None
+        if args.verbose > 0:
+            print(model)
+        ps = model.parameters()
+
+    optimizer = optim.SGD(ps, 
             lr=args.lr, 
             momentum=args.momentum,
             weight_decay=args.decay, 
@@ -209,15 +244,19 @@ def main():
             gamma=gamma
         )
 
+    best_accuracy = 0
     for epoch in range(1, args.epochs + 1):
         if args.verbose > 0:
             print('Epoch {}'.format(epoch))
-        train(args, model, device, train_loader, optimizer, epoch)
+        train(args, model, tnet, device, train_loader, optimizer, epoch)
         if args.milestones:
             scheduler.step()
-        test(args, model, device, test_loader)
-
-    save_model(model, args.arch, args.data, args.nu)
+        accuracy = test(args, model, tnet, device, test_loader)
+        if accuracy > best_accuracy:
+            print("save best!")
+            save_model(model, tnet, args.arch, args.data, best=True)
+            best_accuracy = accuracy
+    save_model(model, tnet, args.arch, args.data)
 
 if __name__ == '__main__':
     main()
