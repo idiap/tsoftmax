@@ -1,8 +1,8 @@
-# _t_-softmax pytorch reproducibility code
+# _t_-softmax with tnet
 
-This repository contains the code to reproduce the results of the paper: 
+The following code uses the concept of _tnet_. Instead of training the networks from scratch as proposed in (1), only the last layers of a neural network trained with softmax are re-trained. This makes it easier to test the effectiveness of t-softmax since only few epochs are needed for training.
 
-  [Niccolò Antonello, Philip N. Garner "A _t_-distribution based operator for enhancing out of distribution robustness of neural network classifiers," IEEE Signal Processing Letters, 2020](https://arxiv.org/abs/2006.05389)
+ (1) [Niccolò Antonello, Philip N. Garner "A _t_-distribution based operator for enhancing out of distribution robustness of neural network classifiers," IEEE Signal Processing Letters, 2020](https://arxiv.org/abs/2006.05389)
 
 The code is based on the [Pytorch machine learning library](https://github.com/pytorch/pytorch).
 If you want to use _t_-softmax in your classifiers/neural networks you can find the modules in `src/tsoftmax.py`.
